@@ -8,6 +8,7 @@ from unblob.handlers import BUILTIN_HANDLERS
 from unblob.models import Handler
 from unblob.plugins import hookimpl
 
+from .handlers.chromium_pak import ChromiumPakHandler
 from .handlers.installshield_pftw import InstallShieldPftwHandler
 from .handlers.irobot.apkg import IRobotApkgHandler
 from .handlers.irobot.otps import IRobotOtpsHandler
@@ -20,6 +21,7 @@ ALL_HANDLERS: tuple[type[Handler], ...] = (
     IRobotOtpsHandler,
     QtRccHandler,
     InstallShieldPftwHandler,
+    ChromiumPakHandler,
 )
 
 
