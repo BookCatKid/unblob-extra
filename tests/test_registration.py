@@ -6,7 +6,14 @@ from unblob.plugins import UnblobPluginManager
 
 import unblob_extra
 
-EXPECTED = {"sonos_upd", "irobot_apkg", "irobot_otps", "qt_rcc", "installshield_pftw"}
+EXPECTED = {
+    "sonos_upd",
+    "irobot_apkg",
+    "irobot_otps",
+    "qt_rcc",
+    "installshield_pftw",
+    "asar",
+}
 
 
 def test_handler_names_are_unique():
