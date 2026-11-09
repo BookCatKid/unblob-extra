@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unblob-extra-handlers"
+version = "0.1.0"
+description = "Community-maintained binary format handlers for unblob"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "BookCatKid" }]
+dependencies = ["unblob>=26.6.4"]
+keywords = ["unblob", "firmware", "reverse-engineering", "archive", "binary-formats"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Archiving",
+]
+
+[project.urls]
+Homepage = "https://github.com/BookCatKid/unblob-extra"
+Repository = "https://github.com/BookCatKid/unblob-extra"
+
+[project.entry-points.unblob_v1]
+unblob_extra = "unblob_extra"
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "ruff>=0.14"]
+
+[tool.setuptools.packages.find]
+include = ["unblob_extra*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
