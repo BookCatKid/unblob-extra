@@ -11,8 +11,9 @@ Additional format handlers for [unblob](https://github.com/onekey-sec/unblob), m
 | `irobot_otps` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot Qualcomm Otps component packages |
 | `qt_rcc` | [#1706](https://github.com/onekey-sec/unblob/pull/1706) | Qt RCC v1–v3 resources, raw/zlib/zstd |
 | `installshield_pftw` | [#1707](https://github.com/onekey-sec/unblob/pull/1707) | InstallShield PackageForTheWeb (classic and stream variants) |
+| `uimage` | local | U-Boot legacy uImage (kernel/ramdisk/multi payloads, dual CRC32 validation) |
 
-The handler sources come from the linked upstream PRs, including their parsing and extraction logic. The package adds only registration, tests and packaging around them. A handler is registered **only while unblob lacks a built-in handler with the same name**, allowing support to graduate upstream without duplicate registration.
+The handler sources come from the linked upstream PRs, including their parsing and extraction logic. The package adds only registration, tests and packaging around them. A handler is registered **only while unblob lacks a built-in handler with the same name**, allowing support to graduate upstream without duplicate registration. Handlers marked "local" were written for this package and have no upstream contribution yet.
 
 ## Run as an installed package
 

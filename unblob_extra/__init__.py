@@ -13,6 +13,7 @@ from .handlers.irobot.apkg import IRobotApkgHandler
 from .handlers.irobot.otps import IRobotOtpsHandler
 from .handlers.qt_rcc import QtRccHandler
 from .handlers.sonos_upd import SonosUPDHandler
+from .handlers.uimage import UImageHandler
 
 ALL_HANDLERS: tuple[type[Handler], ...] = (
     SonosUPDHandler,
@@ -20,6 +21,7 @@ ALL_HANDLERS: tuple[type[Handler], ...] = (
     IRobotOtpsHandler,
     QtRccHandler,
     InstallShieldPftwHandler,
+    UImageHandler,
 )
 
 
