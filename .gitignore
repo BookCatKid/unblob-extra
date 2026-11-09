@@ -7,3 +7,6 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Local unblob run logs
+*.log
