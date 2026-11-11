@@ -7,7 +7,7 @@ Additional format handlers for [unblob](https://github.com/onekey-sec/unblob), m
 | Handler | Source contribution | Formats |
 | --- | --- | --- |
 | `sonos_upd` | [#1704](https://github.com/onekey-sec/unblob/pull/1704) | Sonos UPD firmware sections (encrypted sections identified and preserved, not decrypted) |
-| `irobot_apkg` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot classic, sequential-table and SigmaStar aPKG OTA containers |
+| `irobot_apkg` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot classic, sequential-table and SigmaStar aPKG OTA containers; exact gzip-member carving, verified MD5 and decoded SKU metadata |
 | `irobot_otps` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot Qualcomm Otps component packages |
 | `qt_rcc` | [#1706](https://github.com/onekey-sec/unblob/pull/1706) | Qt RCC v1–v3 resources, raw/zlib/zstd |
 | `installshield_pftw` | [#1707](https://github.com/onekey-sec/unblob/pull/1707) | InstallShield PackageForTheWeb (classic and stream variants) |
@@ -24,6 +24,17 @@ unblob firmware.bin
 ```
 
 Installation registers the handlers automatically using unblob's `unblob_v1` Python entry-point mechanism.
+
+For SigmaStar OTA packages, `irobot_apkg` keeps the gzip member as
+`SStarOta.bin.gz`, preserves every byte of the post-gzip region as
+`SStarOta.bin.metadata.bin`, and (when the observed 976-byte layout validates)
+creates `SStarOta.bin.metadata.json` with the gzip MD5 and embedded SKU
+identifier. The 976-byte structure contains MD5 ASCII at offset 0 and a
+NUL-terminated SKU at offset `0x200`; unsupported layouts are preserved
+without guessed fields. Standard unblob recursion then extracts the gzip
+member and embedded ext4/SquashFS images. Note that ext4 extraction requires
+`debugfs`, and unblob's built-in SquashFS handler requires `sasquatch` (the
+presence of `unsquashfs` alone is insufficient).
 
 ## Run directly from the checkout
 

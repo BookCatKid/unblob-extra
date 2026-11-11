@@ -1,5 +1,6 @@
 import gzip
 import hashlib
+import json
 import struct
 import zlib
 from pathlib import Path
@@ -93,10 +94,20 @@ def sequential_pkg(entries, last_overshoot: int = 0, *, signed=False) -> bytes:
     return body + _trailer(body, signed)
 
 
-def sigmastar_pkg(payload: bytes, name: bytes = b"C3_test", *, signed=False) -> bytes:
+def sigmastar_pkg(
+    payload: bytes,
+    name: bytes = b"C3_test",
+    *,
+    signed=False,
+    sku_template: bytes | None = None,
+) -> bytes:
     member = gzip.compress(payload, mtime=0)
-    # the post-member region starts with the ASCII hex MD5 of the member
-    post = hashlib.md5(member, usedforsecurity=False).hexdigest().encode() + b"\0" * 64
+    md5 = hashlib.md5(member, usedforsecurity=False).hexdigest().encode()
+    if sku_template is None:
+        post = md5 + b"\0" * 64
+    else:
+        assert 2 <= len(sku_template) <= 32
+        post = md5 + b"\0" * (0x200 - 32) + sku_template.ljust(976 - 0x200, b"\0")
     data_end = 0x30 + len(member) + len(post)
     body = header(data_end, name) + member + post
     return body + _trailer(body, signed)
@@ -222,15 +233,53 @@ def test_sigmastar_chunk_and_extract(tmp_path: Path):
     inpath = tmp_path / "in.irobot_apkg"
     inpath.write_bytes(blob)
     result = IRobotApkgExtractor().extract(inpath, tmp_path)
-    carved = next(
-        p.read_bytes()
-        for p in tmp_path.iterdir()
-        if p.is_file() and p.name in ("payload.bin", "SStarOta.bin")
+    member = gzip.compress(payload, mtime=0)
+    assert (tmp_path / "payload.bin.gz").read_bytes() == member
+    assert (tmp_path / "payload.bin.metadata.bin").read_bytes() == (
+        hashlib.md5(member, usedforsecurity=False).hexdigest().encode() + b"\0" * 64
     )
-    inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    assert inflater.decompress(carved) == payload
+    assert not (tmp_path / "payload.bin.metadata.json").exists()
     # embedded MD5 digest and signature both verify, no problems
     assert result.reports == []
+
+
+@pytest.mark.usefixtures("prod_key")
+@pytest.mark.parametrize("sku", [b"L1240PPKEY", b"N1850PP", b"X1850PPKEY"])
+def test_real_sigmastar_metadata_is_preserved_and_decoded(tmp_path: Path, sku: bytes):
+    payload = b"an embedded firmware update" * 7
+    blob = sigmastar_pkg(payload, signed=True, sku_template=sku)
+    inpath = tmp_path / "in.irobot_apkg"
+    inpath.write_bytes(blob)
+    result = IRobotApkgExtractor().extract(inpath, tmp_path)
+    member = gzip.compress(payload, mtime=0)
+    expected_raw = (
+        hashlib.md5(member, usedforsecurity=False).hexdigest().encode()
+        + b"\0" * (0x200 - 32)
+        + sku.ljust(976 - 0x200, b"\0")
+    )
+    assert (tmp_path / "payload.bin.gz").read_bytes() == member
+    assert (tmp_path / "payload.bin.metadata.bin").read_bytes() == expected_raw
+    metadata = json.loads((tmp_path / "payload.bin.metadata.json").read_text())
+    assert metadata == {
+        "format": "sigmastar-sstarota-metadata",
+        "gzip_member_md5": hashlib.md5(member, usedforsecurity=False).hexdigest(),
+        "sku_template": sku.decode(),
+        "raw_metadata_size": 976,
+    }
+    assert result.reports == []
+
+
+@pytest.mark.usefixtures("prod_key")
+def test_malformed_sigmastar_sku_keeps_raw_metadata_without_guessing(tmp_path: Path):
+    blob = bytearray(sigmastar_pkg(b"test", signed=True, sku_template=b"X1850PPKEY"))
+    data_end = struct.unpack_from("<I", blob, 8)[0]
+    blob[data_end - 976 + 0x200] = ord("/")
+    inpath = tmp_path / "in.irobot_apkg"
+    inpath.write_bytes(blob)
+    result = IRobotApkgExtractor().extract(inpath, tmp_path)
+    assert len((tmp_path / "payload.bin.metadata.bin").read_bytes()) == 976
+    assert not (tmp_path / "payload.bin.metadata.json").exists()
+    assert any("signature verification failed" in p.problem for p in result.reports)
 
 
 @pytest.mark.usefixtures("prod_key")
