@@ -24,9 +24,11 @@ Three payload layouts are observed:
   order. The last entry's declared size slightly overshoots the stored data,
   so it is carved up to ``data_end``.
 - ``sigmastar-gzip`` (105/105v/205/405/505/705): a gzip member (original
-  filename ``SStarOta.bin``) at 0x30, followed by a metadata region whose
-  first bytes are the ASCII hex MD5 digest of the member, verified during
-  extraction.
+  filename ``SStarOta.bin``) at 0x30, followed by a 976-byte metadata block
+  with the ASCII hex MD5 of the compressed member at +0, padding to +0x200,
+  and a NUL-padded product SKU at +0x200. The compressed member is carved
+  exactly to its verified end and the metadata is preserved separately;
+  fields are decoded only when the observed layout validates.
 
 Every observed package appends a 304-byte signature trailer after
 ``data_end``: a 48-byte opaque header followed by a 256-byte RSA-2048
@@ -44,6 +46,7 @@ Format reference: https://github.com/BookCatKid/irobot-firmware-archive
 
 import hashlib
 import io
+import json
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -319,13 +322,28 @@ class IRobotApkgExtractor(Extractor):
 
             if container.sigmastar:
                 name = self._gzip_original_name(file) or "payload.bin"
-                fs.carve(
-                    Path(name),
-                    file,
-                    0x30,
-                    container.data_end - 0x30,
-                )
-                self._verify_member_digest(fs, file, container.data_end, name)
+                member_len = self._member_len(fs, file, container.data_end, name)
+                if member_len is None:
+                    # Keep the complete byte range if the gzip stream is
+                    # corrupt: never silently discard a damaged payload.
+                    fs.carve(Path(f"{name}.gz"), file, 0x30, container.data_end - 0x30)
+                else:
+                    # The post-gzip data is structured metadata, *not* part
+                    # of the member. Keeping it attached makes unblob scan
+                    # an otherwise valid 976-byte region as unknown junk.
+                    fs.carve(Path(f"{name}.gz"), file, 0x30, member_len)
+                    post_len = container.data_end - 0x30 - member_len
+                    if post_len:
+                        post_offset = 0x30 + member_len
+                        fs.carve(
+                            Path(f"{name}.metadata.bin"), file, post_offset, post_len
+                        )
+                        self._write_sigmastar_metadata(
+                            fs, file, post_offset, post_len, name
+                        )
+                    self._verify_member_digest(
+                        fs, file, container.data_end, name, member_len=member_len
+                    )
             else:
                 seen: set[str] = set()
                 for entry in container.entries:
@@ -431,12 +449,60 @@ class IRobotApkgExtractor(Extractor):
             remaining -= len(block)
         return hasher.hexdigest()
 
+    def _write_sigmastar_metadata(
+        self, fs: FileSystem, file: File, offset: int, size: int, name: str
+    ):
+        """Decode the SHA/metadata block, preserving the original bytes too.
+
+        The observed 976-byte SigmaStar block contains a 32-byte lowercase
+        ASCII MD5 at +0, zero padding through +0x200, and a NUL-padded SKU
+        template at +0x200. Older/unknown variants remain raw sidecars.
+        """
+        if size != 976:
+            return
+        file.seek(offset, io.SEEK_SET)
+        raw = file.read(size)
+        digest = raw[:32]
+        sku_data = raw[512:]
+        sku_raw, terminator, padding = sku_data.partition(b"\0")
+        if (
+            len(raw) != size
+            or len(digest) != 32
+            or not all(c in b"0123456789abcdefABCDEF" for c in digest)
+            or any(raw[32:512])
+            or not terminator
+            or not (2 <= len(sku_raw) <= 32)
+            or not all(
+                c in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+                for c in sku_raw
+            )
+            or any(padding)
+        ):
+            return
+        details = {
+            "format": "sigmastar-sstarota-metadata",
+            "gzip_member_md5": digest.decode("ascii").lower(),
+            "sku_template": sku_raw.decode("ascii"),
+            "raw_metadata_size": size,
+        }
+        fs.write_bytes(
+            Path(f"{name}.metadata.json"),
+            (json.dumps(details, indent=2) + "\n").encode(),
+        )
+
     def _verify_member_digest(
-        self, fs: FileSystem, file: File, data_end: int, name: str
+        self,
+        fs: FileSystem,
+        file: File,
+        data_end: int,
+        name: str,
+        *,
+        member_len: int | None = None,
     ):
         # the region after the gzip member starts with the ASCII hex MD5
         # digest of the member itself
-        member_len = self._member_len(fs, file, data_end, name)
+        if member_len is None:
+            member_len = self._member_len(fs, file, data_end, name)
         if member_len is None:
             return
         post_len = data_end - 0x30 - member_len
@@ -526,8 +592,9 @@ class IRobotApkgHandler(StructHandler):
             "(marconi, aero, ningbo, congo, roomba9xx, elpaso) and "
             "SigmaStar-based packages (100/200/400/500/700 series). "
             "Entry-table payloads are carved out by label, sequential-table "
-            "payloads by entry id, and SigmaStar packages yield the embedded "
-            "gzip member, verified against the package's MD5 digest. The "
+            "payloads by entry id. SigmaStar packages yield an exact gzip "
+            "member plus separately preserved metadata (verified member "
+            "MD5 and decoded SKU when the layout validates). The "
             "package trailer is verified as an RSA-2048 signature over the "
             "whole package against the OTA public key the robots' own "
             "updater ships; verification failures are reported as "
