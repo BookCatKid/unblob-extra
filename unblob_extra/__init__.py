@@ -10,6 +10,7 @@ from unblob.plugins import hookimpl
 
 from .handlers.installshield_pftw import InstallShieldPftwHandler
 from .handlers.irobot.apkg import IRobotApkgHandler
+from .handlers.irobot.compact_fat16 import CompactFat16Handler
 from .handlers.irobot.otps import IRobotOtpsHandler
 from .handlers.qt_rcc import QtRccHandler
 from .handlers.sonos_upd import SonosUPDHandler
@@ -18,6 +19,7 @@ ALL_HANDLERS: tuple[type[Handler], ...] = (
     SonosUPDHandler,
     IRobotApkgHandler,
     IRobotOtpsHandler,
+    CompactFat16Handler,
     QtRccHandler,
     InstallShieldPftwHandler,
 )

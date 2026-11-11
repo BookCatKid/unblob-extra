@@ -9,6 +9,7 @@ Additional format handlers for [unblob](https://github.com/onekey-sec/unblob), m
 | `sonos_upd` | [#1704](https://github.com/onekey-sec/unblob/pull/1704) | Sonos UPD firmware sections (encrypted sections identified and preserved, not decrypted) |
 | `irobot_apkg` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot classic, sequential-table and SigmaStar aPKG OTA containers; exact gzip-member carving, verified MD5 and decoded SKU metadata |
 | `irobot_otps` | [#1705](https://github.com/onekey-sec/unblob/pull/1705) | iRobot Qualcomm Otps component packages |
+| `irobot_compact_fat16` | local | Compact Qualcomm FAT16 images from iRobot Otps payloads, verified allocation-table recovery of omitted free-space sectors |
 | `qt_rcc` | [#1706](https://github.com/onekey-sec/unblob/pull/1706) | Qt RCC v1–v3 resources, raw/zlib/zstd |
 | `installshield_pftw` | [#1707](https://github.com/onekey-sec/unblob/pull/1707) | InstallShield PackageForTheWeb (classic and stream variants) |
 
@@ -68,6 +69,27 @@ Each handler should be justified by reversing the binary format and validating i
 - iRobot aPKG/Otps format research: https://github.com/BookCatKid/irobot-firmware-archive
 - Qt format reference: [qtbase resource implementation](https://codebrowser.dev/qt5/qtbase/src/corelib/io/qresource.cpp.html)
 - InstallShield PftW format reference: [ISx](https://github.com/lifenjoiner/ISx)
+
+### Compact FAT16 firmware partitions
+
+Some Qualcomm `NON-HLOS.bin` files inside iRobot Otps archives store FAT16
+filesystems with only their allocated clusters present. For example, the
+Wichita 1.0.0 image contains 19,105,280 bytes, while its boot sector declares
+67,108,864 bytes. The FAT16 allocation table proves the last allocated
+cluster ends at exactly the physical file boundary; the missing 48 MB is
+unallocated trailing slack, **not** missing firmware.
+
+Unblob's standard FAT handler can locate this compact image but its `7z`
+extractor reports an unexpected end. The `irobot_compact_fat16` handler
+preempts the generic FAT detection for the verified `MSDOS5.0` / 512-byte-sector
+FAT16 layout, validates the allocation table, and creates a temporary sparse
+copy with zero-filled unused sectors before delegating to `7z`. Both the
+original input and its exact carved bytes are preserved. It refuses images
+whose final allocated cluster is not fully present, and otherwise lets the
+built-in FAT handler process normal full-length images. Requires `7z`.
+
+The handler was validated on an archived signed Wichita 1.0.0 firmware image;
+no proprietary firmware bytes are shipped as tests or fixtures.
 
 The plugin does not bundle firmware encryption keys, downloaded firmware images, or device-specific extraction programs.
 
